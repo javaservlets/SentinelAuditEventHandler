@@ -2,9 +2,9 @@
 
 ## ForgeRock Common Audit (CAUD) for Sentinel
 
-If you are not already familiar with the [ForgeRock CAUD] (https://www.forgerock.com/platform/common-services/common-audit) it is a framework for audit event handlers that are plugged in to our individual products. The handlers record events, logging them for example into files, relational databases, or [syslog](https://en.wikipedia.org/wiki/Syslog).
+If you are not already familiar with the [ForgeRock CAUD](https://www.forgerock.com/platform/common-services/common-audit) it is a framework for audit event handlers that are plugged in to our individual products. The handlers record events, logging them for example into files, relational databases, or [syslog](https://en.wikipedia.org/wiki/Syslog).
 
-Speaking of syslog, Microsoft recently released [Sentinel] (https://azure.microsoft.com/en-us/services/azure-sentinel/), their Security Information and Event Manager (SIEM) for the Azure Cloud that uses syslog extensively. With Sentinel, events for any system under an Azure cluster that want to be monitored need to be sent to a designated 'Sentinel agent' machine in order to be processed.
+Speaking of syslog, Microsoft recently released [Sentinel](https://azure.microsoft.com/en-us/services/azure-sentinel/), their Security Information and Event Manager (SIEM) for the Azure Cloud that uses syslog extensively. With Sentinel, events for any system under an Azure cluster that want to be monitored need to be sent to a designated 'Sentinel agent' machine in order to be processed.
 
 Microsoft provides an automated configuration script during the Sentinel agent setup in order to listen to Syslog messages; this makes one integration with the CAUD almost trivial given that one of the dozen or so CAUD event handlers we ship out of the box is for specifically for syslog.
 
@@ -41,7 +41,7 @@ Note: The instructions for configuring the CAUD vary slightly from product to pr
 
 
 #### Steps to configure in Azure Sentinel
-Follow the very thorough configuration steps provided by [Microsoft] (https://docs.microsoft.com/en-us/azure/sentinel/connect-common-event-format)
+Follow the very thorough configuration steps provided by [Microsoft](https://docs.microsoft.com/en-us/azure/sentinel/connect-common-event-format)
 
 #### Quick test to verify the above is working
 - assuming you specified 'authentication' per the example above, log out or log into openidm
@@ -61,4 +61,4 @@ Follow the very thorough configuration steps provided by [Microsoft] (https://do
 	- insert from the https://github.com/javaservlets/SentinelAuditEventHandler/tree/master/misc/rsyslog.conf file here in this repo lines 29-33 into your /etc/rsyslog.conf, and make sure lines 43 and 46 match your values (if changes are made, you must run 'sudo service rsyslog restart')
 	
 #### Deeper test to verify the above is working
-- to verify that your CEF messages are being processed by Sentinel, pay close attention to step 5 when running their [canned reports] (https://techcommunity.microsoft.com/t5/azure-sentinel/best-practices-for-common-event-format-cef-collection-in-azure/ba-p/969990)
+- to verify that your CEF messages are being processed by Sentinel, pay close attention to step 5 when running their [canned reports](https://techcommunity.microsoft.com/t5/azure-sentinel/best-practices-for-common-event-format-cef-collection-in-azure/ba-p/969990)
