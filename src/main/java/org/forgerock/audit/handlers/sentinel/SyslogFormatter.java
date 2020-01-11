@@ -101,10 +101,8 @@ class SyslogFormatter {
         final String msgId=auditEvent.get(EVENT_NAME).asString();
         final String structuredData=structuredDataFormatters.get(topic).format(auditEvent);
 
-        //rj? pipe
         //CEF:Version|Device Vendor|Device Product|Device Version|Signature ID|Name|Severity|Extension
-        //CEF:0|ForgeRock|CAUD|1.0|0101202|CEF CAUD Handler|1|key=val key2=val2
-
+        
         String parsedCEF = "CEF:1|ForgeRock|CAUD|1.0.0|01102020|CEF CAUD Handler|1|"
                 + "priority:" + priority + " "
                 //+ "timestamp:" + timestamp + " "           //     TIMESTAMP (worried :: will mess things up so figure that out later
