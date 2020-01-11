@@ -1,4 +1,4 @@
-![image alt text](./images/logo.png)
+![image alt text](https://github.com/javaservlets/SentinelAuditEventHandler/tree/master/misc/logo.png)
 
 ## ForgeRock Common Audit Handler (CAUD) for Sentinel
 
