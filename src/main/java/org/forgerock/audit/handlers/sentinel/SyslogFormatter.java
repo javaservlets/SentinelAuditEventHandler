@@ -29,6 +29,9 @@ import org.forgerock.util.Reject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.text.SimpleDateFormat;
 import java.util.*;
 
 import static java.util.Arrays.asList;
@@ -49,10 +52,8 @@ import static org.forgerock.audit.util.JsonValueUtils.extractValueAsString;
 class SyslogFormatter {
 
     private static final Logger logger=LoggerFactory.getLogger(SyslogFormatter.class);
-
     private static final String SYSLOG_SPEC_VERSION="1";
     private static final String NIL_VALUE="-";
-
     private final Map<String, StructuredDataFormatter> structuredDataFormatters;
     private final Map<String, SeverityFieldMapping> severityFieldMappings;
     private final String hostname;
@@ -101,17 +102,28 @@ class SyslogFormatter {
         final String msgId=auditEvent.get(EVENT_NAME).asString();
         final String structuredData=structuredDataFormatters.get(topic).format(auditEvent);
 
-        //CEF:Version|Device Vendor|Device Product|Device Version|Signature ID|Name|Severity|Extension
-        
-        String parsedCEF = "CEF:1|ForgeRock|CAUD|1.0.0|01102020|CEF CAUD Handler|1|"
-                + "priority:" + priority + " "
-                //+ "timestamp:" + timestamp + " "           //     TIMESTAMP (worried :: will mess things up so figure that out later
-                + "hostname:" + hostname + " "            //     HOSTNAME
-                + "appName:" + appName + " "             //     APP-NAME
-                + "procId:" + procId + " "              //     PROCID
-                + "msgId:" + msgId + " " ;              //     MSGID
-                //+ "structuredData:" + structuredData; //      STRUCTURED-DATA (worried :: will mess things up so figure that out later
-                                            //      SYSLOG_SPEC_VERSION
+        String pattern = "dd MMMMM HH:mm:ss";
+        SimpleDateFormat simpleDateFormat = new SimpleDateFormat(pattern, new Locale("us", "EN"));
+        String date = simpleDateFormat.format(new Date());
+
+        InetAddress inetAddress = null;
+        try {
+            inetAddress = InetAddress.getLocalHost();
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+        }
+
+                            //CEF:Version|Device Vendor|Device Product|Version|Signature ID|Name|Severity|Extensions
+        String parsedCEF = date + " CEF:0|ForgeRock Inc|Trust Partner Network|1.0|300|authorization attempt|1|" //rj? a) pass in status code b) does cef:1 work?
+                + " src=" + inetAddress.getHostAddress()    // a CEF standard field
+                + " act=" + msgId                           // a CEF standard field
+                + " targetType=" + inetAddress.getHostName()       // HOSTNAME
+                + " cn1=" + appName                         // APP-NAME
+                + " procId=" + procId                       // PROCID
+                + " fr_priority=" + priority
+                + " msg=" + structuredData
+                ;     // rj? STRUCTURED-DATA (worried :: will mess things up so figure that out later
+        System.out.println(parsedCEF);
         return parsedCEF;
     }
 
