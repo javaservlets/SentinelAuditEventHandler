@@ -36,7 +36,8 @@ import java.util.*;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.unmodifiableSet;
-import static org.forgerock.audit.events.AuditEventBuilder.*;
+import static org.forgerock.audit.events.AuditEventBuilder.EVENT_NAME;
+import static org.forgerock.audit.events.AuditEventBuilder.TIMESTAMP;
 import static org.forgerock.audit.events.AuditEventHelper.getAuditEventSchema;
 import static org.forgerock.audit.events.AuditEventHelper.jsonPointerToDotNotation;
 import static org.forgerock.audit.util.JsonSchemaUtils.generateJsonPointers;
@@ -51,15 +52,61 @@ import static org.forgerock.audit.util.JsonValueUtils.extractValueAsString;
  */
 class SyslogFormatter {
 
-    private static final Logger logger=LoggerFactory.getLogger(SyslogFormatter.class);
-    private static final String SYSLOG_SPEC_VERSION="1";
-    private static final String NIL_VALUE="-";
+    private static final Logger logger = LoggerFactory.getLogger(SyslogFormatter.class);
+    private static final String SYSLOG_SPEC_VERSION = "1";
+    private static final String NIL_VALUE = "-";
     private final Map<String, StructuredDataFormatter> structuredDataFormatters;
     private final Map<String, SeverityFieldMapping> severityFieldMappings;
-    private final String hostname;
-    private final String appName;
-    private final String procId;
     private final Facility facility;
+
+    private final String HOST_NAME;
+    private final String APP_NAME;
+    private final String PROC_ID;
+
+    /**
+     * Format the provided <code>auditEvent</code> to a CEF message...
+        */
+    public String format(String topic, JsonValue auditEvent) {
+
+        Reject.ifFalse(canFormat(topic), "Unknown event topic");
+
+        final Severity FR_SEVERITY = getSeverityLevel(topic, auditEvent); //rj? kCase
+        final String FR_PRIORITY = String.valueOf(calculatePriorityValue(facility, FR_SEVERITY));
+        final String TIME_STAMP = auditEvent.get(TIMESTAMP).asString();
+        final String MSG_ID = auditEvent.get(EVENT_NAME).asString();
+        final String STRUCTURED_DATA = structuredDataFormatters.get(topic).format(auditEvent);
+
+        final String CEF_VERSION = "CEF:0";
+        final String FR_VENDOR = "ForgeRock Inc";
+        final String FR_PRODUCT = "Trust Partner Network";
+        final String FR_VERSION = "1.0";
+        final String FR_CODE = "100";
+        final String FR_TYPE = "forgerock cef";
+        final String FR_MSG_CODE = "1";
+
+        String pattern = "dd MMMMM HH:mm:ss";
+        SimpleDateFormat simpleDateFormat = new SimpleDateFormat(pattern, new Locale("us", "EN"));
+        String date = simpleDateFormat.format(new Date());
+
+        InetAddress inetAddress = null;
+        try {
+            inetAddress = InetAddress.getLocalHost();
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+        }
+
+        //CEF:Version|Device Vendor|Device Product|Version|Signature ID|Name|Severity|Extensions
+        String parsedCEF = date + " " + CEF_VERSION + "|" + FR_VENDOR + "|" + APP_NAME + "|" + FR_VERSION + "|"  + FR_PRIORITY + "|" + FR_TYPE + "|" + FR_SEVERITY + "|"
+                + " src=" + inetAddress.getHostAddress()    // a CEF standard field
+                + " act=" + MSG_ID                           // a CEF standard field
+                + " targetType=" + inetAddress.getHostName()       // HOSTNAME
+                //+ " cn1=" + APP_NAME                         // APP-NAME
+                + " procId=" + PROC_ID                       // PROCID
+                //+ " fr_priority=" + PRIORITY
+                + " msg=" + STRUCTURED_DATA;     // rj? STRUCTURED-DATA (worried :: will mess things up
+        System.out.println(parsedCEF);
+        return parsedCEF;
+    }
 
     /**
      * Construct a new SyslogFormatter.
@@ -74,58 +121,17 @@ class SyslogFormatter {
 
         Reject.ifNull(localHostNameProvider, "LocalHostNameProvider must not be null");
 
-        this.hostname=getLocalHostName(localHostNameProvider);
-        this.procId=String.valueOf(SyslogFormatter.class.hashCode());
-        this.appName=getProductName(productInfoProvider);
-        this.facility=config.getFacility();
-        this.severityFieldMappings=
+        this.HOST_NAME = getLocalHostName(localHostNameProvider);
+        this.PROC_ID = String.valueOf(SyslogFormatter.class.hashCode());
+        this.APP_NAME = getProductName(productInfoProvider);
+        this.facility = config.getFacility();
+        this.severityFieldMappings =
                 createSeverityFieldMappings(config.getSeverityFieldMappings(), eventTopicsMetaData);
-        this.structuredDataFormatters=Collections.unmodifiableMap(
-                createStructuredDataFormatters(appName, eventTopicsMetaData));
+        this.structuredDataFormatters = Collections.unmodifiableMap(
+                createStructuredDataFormatters(APP_NAME, eventTopicsMetaData));
     }
 
-    /**
-     * Translate the provided <code>auditEvent</code> to an RFC-5424 compliant Syslog message.
-     *
-     * @param topic      The topic of the provided <code>auditEvent</code>.
-     * @param auditEvent The audit event to be formatted.
-     * @return an RFC-5424 compliant Syslog message.
-     * @throws IllegalArgumentException If this formatter has no meta-data for the specified <code>topic</code>.
-     */
-    public String format(String topic, JsonValue auditEvent) {
 
-        Reject.ifFalse(canFormat(topic), "Unknown event topic");
-
-        final Severity severity=getSeverityLevel(topic, auditEvent);
-        final String priority=String.valueOf(calculatePriorityValue(facility, severity));
-        final String timestamp=auditEvent.get(TIMESTAMP).asString();
-        final String msgId=auditEvent.get(EVENT_NAME).asString();
-        final String structuredData=structuredDataFormatters.get(topic).format(auditEvent);
-
-        String pattern = "dd MMMMM HH:mm:ss";
-        SimpleDateFormat simpleDateFormat = new SimpleDateFormat(pattern, new Locale("us", "EN"));
-        String date = simpleDateFormat.format(new Date());
-
-        InetAddress inetAddress = null;
-        try {
-            inetAddress = InetAddress.getLocalHost();
-        } catch (UnknownHostException e) {
-            e.printStackTrace();
-        }
-
-                            //CEF:Version|Device Vendor|Device Product|Version|Signature ID|Name|Severity|Extensions
-        String parsedCEF = date + " CEF:0|ForgeRock Inc|Trust Partner Network|1.0|300|authorization attempt|1|" //rj? a) pass in status code b) does cef:1 work?
-                + " src=" + inetAddress.getHostAddress()    // a CEF standard field
-                + " act=" + msgId                           // a CEF standard field
-                + " targetType=" + inetAddress.getHostName()       // HOSTNAME
-                + " cn1=" + appName                         // APP-NAME
-                + " procId=" + procId                       // PROCID
-                + " fr_priority=" + priority
-                + " msg=" + structuredData
-                ;     // rj? STRUCTURED-DATA (worried :: will mess things up so figure that out later
-        System.out.println(parsedCEF);
-        return parsedCEF;
-    }
 
     /**
      * Returns <code>true</code> if this formatter has been configured to handle events of the specified topic.
@@ -141,7 +147,7 @@ class SyslogFormatter {
     private Map<String, SeverityFieldMapping> createSeverityFieldMappings(
             List<SeverityFieldMapping> mappings, EventTopicsMetaData eventTopicsMetaData) {
 
-        Map<String, SeverityFieldMapping> results=new HashMap<>(mappings.size());
+        Map<String, SeverityFieldMapping> results = new HashMap<>(mappings.size());
         for (SeverityFieldMapping mapping : mappings) {
 
             if (results.containsKey(mapping.getTopic())) {
@@ -154,18 +160,18 @@ class SyslogFormatter {
                 continue;
             }
 
-            JsonValue auditEventMetaData=eventTopicsMetaData.getSchema(mapping.getTopic());
+            JsonValue auditEventMetaData = eventTopicsMetaData.getSchema(mapping.getTopic());
             JsonValue auditEventSchema;
             try {
-                auditEventSchema=getAuditEventSchema(auditEventMetaData);
+                auditEventSchema = getAuditEventSchema(auditEventMetaData);
             } catch (ResourceException e) {
                 logger.warn(e.getMessage());
                 continue;
             }
-            Set<String> topicFieldPointers=generateJsonPointers(auditEventSchema);
-            String mappedField=mapping.getField();
+            Set<String> topicFieldPointers = generateJsonPointers(auditEventSchema);
+            String mappedField = mapping.getField();
             if (mappedField != null && !mappedField.startsWith("/")) {
-                mappedField="/" + mappedField;
+                mappedField = "/" + mappedField;
             }
             if (!topicFieldPointers.contains(mappedField)) {
                 logger.warn("Syslog severity field mapping for topic {} references unknown field {}",
@@ -182,9 +188,9 @@ class SyslogFormatter {
             String productName,
             EventTopicsMetaData eventTopicsMetaData) {
 
-        final Map<String, StructuredDataFormatter> results=new HashMap<>();
+        final Map<String, StructuredDataFormatter> results = new HashMap<>();
         for (String topic : eventTopicsMetaData.getTopics()) {
-            JsonValue schema=eventTopicsMetaData.getSchema(topic);
+            JsonValue schema = eventTopicsMetaData.getSchema(topic);
             results.put(topic, new StructuredDataFormatter(productName, topic, schema));
         }
         return results;
@@ -192,13 +198,13 @@ class SyslogFormatter {
 
     private Severity getSeverityLevel(String topic, JsonValue auditEvent) {
         if (severityFieldMappings.containsKey(topic)) {
-            SeverityFieldMapping severityFieldMapping=severityFieldMappings.get(topic);
-            String severityField=severityFieldMapping.getField();
+            SeverityFieldMapping severityFieldMapping = severityFieldMappings.get(topic);
+            String severityField = severityFieldMapping.getField();
             if (severityField != null && !severityField.startsWith("/")) {
-                severityField="/" + severityField;
+                severityField = "/" + severityField;
             }
-            JsonValue jsonValue=auditEvent.get(new JsonPointer(severityField));
-            String severityValue=jsonValue == null ? null : jsonValue.asString();
+            JsonValue jsonValue = auditEvent.get(new JsonPointer(severityField));
+            String severityValue = jsonValue == null ? null : jsonValue.asString();
             if (severityValue == null) {
                 logger.debug("{} value not set; defaulting to INFORMATIONAL Syslog SEVERITY level", severityField);
             } else {
@@ -228,7 +234,7 @@ class SyslogFormatter {
      * @see <a href="https://tools.ietf.org/html/rfc5424#section-6.2.4">RFC-5424 section 6.2.4</a>
      */
     private String getLocalHostName(LocalHostNameProvider localHostNameProvider) {
-        String localHostName=localHostNameProvider.getLocalHostName();
+        String localHostName = localHostNameProvider.getLocalHostName();
         return localHostName != null ? localHostName : NIL_VALUE;
     }
 
@@ -238,7 +244,7 @@ class SyslogFormatter {
      * @see <a href="https://tools.ietf.org/html/rfc5424#section-6.2.5">RFC-5424 section 6.2.5</a>
      */
     private String getProductName(ProductInfoProvider productInfoProvider) {
-        String productName=productInfoProvider.getProductName();
+        String productName = productInfoProvider.getProductName();
         return productName != null ? productName.replace(" ", "-") : NIL_VALUE;
     }
 
@@ -251,11 +257,11 @@ class SyslogFormatter {
      */
     private static class StructuredDataFormatter {
 
-        private static final String FORGEROCK_IANA_ENTERPRISE_ID="36733";
+        private static final String FORGEROCK_IANA_ENTERPRISE_ID = "36733";
         /**
          * The set of audit event fields that should not be copied to structured-data.
          */
-        private static final Set<String> IGNORED_FIELDS=unmodifiableSet(
+        private static final Set<String> IGNORED_FIELDS = unmodifiableSet(
                 new HashSet<>(asList("_id", TIMESTAMP, EVENT_NAME)));
 
         private final String id;
@@ -279,13 +285,13 @@ class SyslogFormatter {
 
             JsonValue auditEventSchema;
             try {
-                auditEventSchema=getAuditEventSchema(auditEventMetaData);
+                auditEventSchema = getAuditEventSchema(auditEventMetaData);
             } catch (ResourceException e) {
                 throw new IllegalArgumentException(e.getMessage(), e);
             }
 
-            id=topic + "." + productName + "@" + FORGEROCK_IANA_ENTERPRISE_ID;
-            fieldNames=unmodifiableSet(generateJsonPointers(auditEventSchema));
+            id = topic + "." + productName + "@" + FORGEROCK_IANA_ENTERPRISE_ID;
+            fieldNames = unmodifiableSet(generateJsonPointers(auditEventSchema));
         }
 
         /**
@@ -296,12 +302,12 @@ class SyslogFormatter {
          */
         public String format(JsonValue auditEvent) {
 
-            StringBuilder sd=new StringBuilder();
+            StringBuilder sd = new StringBuilder();
 
             sd.append("[");
             sd.append(id);
             for (String fieldName : fieldNames) {
-                String formattedName=formatParamName(fieldName);
+                String formattedName = formatParamName(fieldName);
                 if (IGNORED_FIELDS.contains(formattedName)) {
                     continue;
                 }
