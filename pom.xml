@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Copyright 2015-2017 ForgeRock AS. All Rights Reserved
+  Copyright 2015-2023 ForgeRock AS. All Rights Reserved
 
   Use of this code requires a commercial software license with ForgeRock AS.
   or with one of its affiliates. All use shall be exclusively subject
@@ -37,7 +37,7 @@
       <repository>
          <id>forgerock-internal-releases</id>
          <name>ForgeRock Internal Releases Repository</name>
-         <url>http://maven.forgerock.org/repo/internal-releases</url>
+         <url>https://maven.forgerock.org/artifactory/internal-releases</url>
          <snapshots>
             <enabled>false</enabled>
          </snapshots>
@@ -48,7 +48,7 @@
       <repository>
          <id>forgerock-internal-snapshots</id>
          <name>ForgeRock Internal Snapshots Repository</name>
-         <url>http://maven.forgerock.org/repo/internal-snapshots</url>
+         <url>https://maven.forgerock.org/artifactory/internal-snapshots</url>
          <snapshots>
             <enabled>true</enabled>
          </snapshots>
